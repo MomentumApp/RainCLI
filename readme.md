@@ -12,6 +12,7 @@ This repository is bootstrapped with a bunch of useful functions for managing yo
 * Open `config.js` and setup the configuration settings. These are available in your Momentum HQ under **Theming > Setup**.
 * Open your terminal and `cd` to your repository directory.
 * Run `make install`
+* Run `./rain reset` (this loads any deployed theme content into your repository, local changes will be overwritten)
 * After installation is completed, and anytime you want to work on your theme in the future, run `make run` and your changes will automatically deploy live as you work.
 
 # Updating
