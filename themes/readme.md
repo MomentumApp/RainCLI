@@ -1,0 +1,1 @@
+This directory will automatically populate with theme files when you run `./rain/reset themeName`
