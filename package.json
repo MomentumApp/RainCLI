@@ -1,0 +1,23 @@
+{
+  "name": "rainmaker-package",
+  "version": "0.1.0",
+  "author": "Momentum <support@momentumapp.co>",
+  "description": "Tracks and synchronizes your deployed website.",
+  "contributors": [
+    {
+      "name": "David Boskovic",
+      "email": "david@momentumapp.co"
+    }
+  ],
+  "dependencies" : {
+    "watch"   :  "*",
+    "terminal-notifier" :  "*",
+    "restler"    :  "*",
+    "cli-table": "*",
+    "commander": "*",
+    "url": "*",
+    "path":"*",
+    "mime":"*"
+
+  }
+}

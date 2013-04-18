@@ -1,0 +1,355 @@
+#!/usr/bin/env node
+
+var watch 		= require("watch"),
+	fs 			= require('fs'),
+	notifier 	= require('terminal-notifier'),
+	rest 		= require('restler'),
+	sys 		= require('util'),
+	conf		= require("./config.js")
+	program		= require('commander'),
+	table 		= require('cli-table');
+
+
+
+program
+	.version('0.0.1')
+	.option('-C, --chdir <path>', 'change the working directory')
+	.option('-c, --config <path>', 'set config path [./deploy.conf]')
+	.option('-v, --verbose', 'show verbose log of activity')
+
+
+
+
+// $ deploy setup stage
+// $ deploy setup
+program
+	.command('preview [port]')
+	.description('Runs a local asset server for previewing changes live.')
+	.action(function(port){
+
+		var http = require("http"),
+			url = require("url"),
+			path = require("path"),
+			mime = require("mime")
+			port = port || 7101;
+
+		http.createServer(function(request, response) {
+
+			var uri = url.parse(request.url).pathname
+				, filename = path.join(process.cwd(),'/themes', uri);
+
+			fs.exists(filename, function(exists) {
+				if(!exists) {
+					response.writeHead(404, {"Content-Type": "text/plain"});
+					response.write("404 Not Found\n");
+					response.end();
+					return;
+				}
+
+			if (fs.statSync(filename).isDirectory()) filename += '/index.html';
+
+				fs.readFile(filename, "binary", function(err, file) {
+					if(err) {
+						response.writeHead(500, {"Content-Type": "text/plain"});
+						response.write(err + "\n");
+						response.end();
+						return;
+					}
+
+					response.writeHead(200, {"Content-Type": mime.lookup(filename)});
+					response.write(file, "binary");
+					response.end();
+				});
+			});
+		}).listen(parseInt(port, 10));
+
+		console.log("Static file server running at\n  => http://localhost:" + port + "/\nCTRL + C to shutdown");
+
+	});
+
+// $ deploy setup stage
+// $ deploy setup
+program
+	.command('deploy [file]')
+	.description('Deploy all changed files or just a specific file.')
+	.action(function(file){
+		file = file || 'all';
+
+		// check commit diff since last deploy (or make sure file has been committed)
+
+		// create list of files to deploy
+
+		// request confirmation for deploy
+
+		// deploy files
+		console.log('setup for %s env(s)', env);
+	});
+
+
+// $ deploy setup stage
+// $ deploy setup
+program
+	.command('reset [theme]')
+	.description('Reset all files to the last deployed version or a specific theme.')
+	.action(function(theme){
+
+		// prevent any package resets for now.
+		if(theme) return console.log('--> Package not found.')
+		theme = theme || conf.momentum_theme;
+
+		// load all the servers files
+
+		rest.get(conf.momentum_domain+'/apiv2/themes/'+theme+'/files', {
+			username: conf.momentum_apiuser,
+			password: conf.momentum_apikey,
+			query: {
+				'page-length':40
+			}
+		}).on('complete', function(response) {
+
+			// make sure we have the dir installed.
+			if(!fs.existsSync("themes/"+theme)) {
+				fs.mkdirSync("themes/"+theme);
+			}
+
+			var filepath;
+
+			for(x in response.data) {
+				//console.log('--> [synchronized] '+response.data[x].filename)
+				filepath = response.data[x].filename;
+				var fileArray = filepath.split("/");
+				if(fileArray.length != 2) {
+					console.log('--> [invalid] '+filepath)
+					continue;
+				} else {
+					var dir = fileArray[0]
+					var filename = fileArray[1]
+					if(!fs.existsSync("themes/"+theme+'/'+dir)) {
+						fs.mkdirSync("themes/"+theme+'/'+dir);
+					}
+
+				}
+
+				if(fs.existsSync("themes/"+theme+"/"+filepath)) {
+					console.log('--> [updated] '+"themes/"+theme+"/"+filepath)
+				} else {
+					fs.writeFileSync("themes/"+theme+"/"+filepath, new Buffer(response.data[x].content, 'base64').toString('utf8'))
+					console.log('--> [+] "'+"themes/"+theme+"/"+filepath+'"')
+					//return;
+				}
+
+					// fs.readFile(, 'utf8', function (err,data) {
+					// 	console.log(data)
+					// 	if (err) return sys.puts('--> [+] "'+filename+'" ['+err+']')
+					// 	console.log('--> [updated] '+filename)
+					// });
+			}
+			//sys.puts(data.data[0].name); // auto convert to object
+		});
+	});
+
+// $ deploy setup stage
+// $ deploy setup
+program
+	.command('export [collection] [format] [filter]')
+	.description('Export a collection in CSV format.')
+	.action(function(env,format,filter){
+		env = env || 'all';
+		console.log('setup for %s env(s)', env);
+	});
+
+program
+	.command('search [collection] [term]')
+	.description('Search a collection for a specific object.')
+	.action(function(collection,search){
+		if(!collection)
+			console.log('Please specify a collection to search.')
+		else {
+
+			rest.get(conf.momentum_domain+'/apiv2/'+collection, {
+					username: conf.momentum_apiuser,
+					password: conf.momentum_apikey,
+					query: {
+						search:search,
+						'page-length':40
+					}
+				}).on('complete', function(response) {
+
+					if(collection == 'members') {
+						var members = new table({
+							head: ['ID', 'NAME', 'EMAIL', 'JOINED']
+							, colWidths: [9, 40,40,24]
+						});
+
+						for(x in response.data) {
+
+							// table is an Array, so you can `push`, `unshift`, `splice` and friends
+							members.push(
+								[response.data[x].id, response.data[x].name, response.data[x].email, response.data[x]['date-registered']]
+							);
+						}
+
+						console.log(members.toString());
+					}
+					else if(collection == 'projects' || collection == 'groups') {
+						var projects = new table({
+							head: ['ID', 'NAME', 'RAISED', 'TARGET', 'CREATED']
+							, colWidths: [9, 50,20,20,24]
+						});
+
+						for(x in response.data) {
+							// table is an Array, so you can `push`, `unshift`, `splice` and friends
+							projects.push(
+								[response.data[x].id, response.data[x].name, response.data[x].progress.money+' ('+response.data[x].progress.percent+')',response.data[x].target, response.data[x]['date-created']]
+							);
+						}
+
+						console.log(projects.toString());
+
+					}
+				//sys.puts(data.data[0].name); // auto convert to object
+			});
+		}
+	});
+
+program
+	.command('create [collection]')
+	.description('Create a new object in a collection.')
+	.action(function(collection,search){
+		if(!collection)
+			console.log('Please specify a collection to create in.')
+		else {
+			switch(collection) {
+				case 'members':
+				case 'member':
+					program.prompt('EMAIL*      | ', function(email){
+						if(!email.match(/^([0-9a-zA-Z]([-\+.\w]*[0-9a-zA-Z])*@([0-9a-zA-Z]*[-\w]*[0-9a-zA-Z]\.)+[a-zA-Z]{2,9})$/)) {
+
+							process.stdout.write('            |--> Please provide a valid email address.');
+							process.exit();
+						}
+						program.prompt('NAME        | ', function(name){
+							program.password('PASSWORD    | ', function(pass){
+								program.confirm('ADMIN (y/n) | ', function(admin){
+									console.log('            |--> Created: '+name+' '+email+':'+pass+'+'+admin);
+									process.stdin.destroy();
+								});
+							});
+						});
+					});
+				break;
+			}
+			// rest.get(conf.momentum_domain+'/apiv2/'+collection, {
+			// 		username: conf.momentum_apiuser,
+			// 		password: conf.momentum_apikey,
+			// 		query: {
+			// 			search:search,
+			// 			'page-length':40
+			// 		}
+			// 	}).on('complete', function(response) {
+
+			// 		if(collection == 'members') {
+			// 			var members = new table({
+			// 				head: ['ID', 'NAME', 'EMAIL', 'JOINED']
+			// 				, colWidths: [9, 40,40,24]
+			// 			});
+
+			// 			for(x in response.data) {
+
+			// 				// table is an Array, so you can `push`, `unshift`, `splice` and friends
+			// 				members.push(
+			// 					[response.data[x].id, response.data[x].name, response.data[x].email, response.data[x]['date-registered']]
+			// 				);
+			// 			}
+
+			// 			console.log(members.toString());
+			// 		}
+			// 		else if(collection == 'projects' || collection == 'groups') {
+			// 			var projects = new table({
+			// 				head: ['ID', 'NAME', 'RAISED', 'TARGET', 'CREATED']
+			// 				, colWidths: [9, 50,20,20,24]
+			// 			});
+
+			// 			for(x in response.data) {
+			// 				// table is an Array, so you can `push`, `unshift`, `splice` and friends
+			// 				projects.push(
+			// 					[response.data[x].id, response.data[x].name, response.data[x].progress.money+' ('+response.data[x].progress.percent+')',response.data[x].target, response.data[x]['date-created']]
+			// 				);
+			// 			}
+
+			// 			console.log(projects.toString());
+
+			// 		}
+			// 	//sys.puts(data.data[0].name); // auto convert to object
+			// });
+		}
+	});
+
+// $ deploy stage
+// $ deploy production
+program
+	.command('watch [theme]')
+	.description('Watch for changed files, new files and deleted files, then sync these to the test queue.')
+	.action(function(theme){
+		theme = theme || conf.momentum_theme
+		var synchronizeLive = function(f,del) {
+
+			var postRequest = function(f,del,data) {
+				rest.post(conf.momentum_domain+'/apiv2/themes/'+theme+'/files', {
+					multipart: false,
+					username: conf.momentum_apiuser,
+					password: conf.momentum_apikey,
+					data: {
+						'file': f.replace('themes/'+theme+'/',''),
+						'content': new Buffer(data).toString('base64'),
+						'delete': del ? true : false
+					}
+				}).on('complete', function(data) {
+					sys.puts('  |--> server updated: "'+f+'"')
+					notifier(f+' saved...', { title: 'Momentum' });
+				});
+			}
+
+			if(!del)
+				fs.readFile(f, 'utf8', function (err,data) {
+					if (err) return sys.puts('--> error reading file: "'+f+'" ['+err+']')
+					postRequest(f,del,data);
+				});
+			else
+				postRequest(f,del, "<div style=\"color:red;font-family:Arial;font-weight:bold\">[DELETED]</div>");
+		}
+
+		watch.watchTree('./themes/'+theme, {ignoreDotFiles:true}, function (f, curr, prev) {
+
+			if(typeof f == "string" && !f.match(/.+\.lhtml/))
+				return true;
+
+			// triggers after tree has started tracking
+			if (typeof f == "object" && prev === null && curr === null) {
+				console.log('--> theme being monitored: "'+theme+'"')
+				//console.log(f)
+			}
+
+			// save a new file
+			else if (prev === null) {
+				sys.puts('--> new theme file added: "'+f+'"')
+				synchronizeLive(f)
+			}
+
+			// remove a file.
+			else if (curr.nlink === 0) {
+				notifier('File removed...', { title: 'Momentum' });
+
+				sys.puts('--> file deleted: "'+f+'"')
+				synchronizeLive(f,true)
+			}
+
+			// update a file.
+			else {
+				sys.puts('--> change detected: "'+f+'"')
+				synchronizeLive(f)
+			}
+		})
+	});
+
+program.parse(process.argv);
