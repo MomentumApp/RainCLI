@@ -17,7 +17,8 @@
     "commander": "*",
     "url": "*",
     "path":"*",
-    "mime":"*"
-
+    "mime":"*",
+    "openurl":"*",
+    "jsonfile":"*"
   }
 }

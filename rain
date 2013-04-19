@@ -7,6 +7,7 @@ var watch 		= require("watch"),
 	sys 		= require('util'),
 	conf		= require("./config.js")
 	program		= require('commander'),
+	jf 			= require('jsonfile'),
 	table 		= require('cli-table');
 
 
@@ -23,20 +24,25 @@ program
 // $ deploy setup stage
 // $ deploy setup
 program
-	.command('preview [port]')
+	.command('preview [port] [theme]')
 	.description('Runs a local asset server for previewing changes live.')
-	.action(function(port){
+	.action(function(port,theme){
+
+		theme = theme || conf.momentum_theme;
+		if(!fs.existsSync('themes/'+conf.momentum_theme+"/assets"))
+			return console.log('--> You must create an assets directory at: themes/'+theme+"/assets");
 
 		var http = require("http"),
 			url = require("url"),
 			path = require("path"),
-			mime = require("mime")
+			mime = require("mime"),
+			openurl = require("openurl"),
 			port = port || 7101;
 
 		http.createServer(function(request, response) {
 
 			var uri = url.parse(request.url).pathname
-				, filename = path.join(process.cwd(),'/themes', uri);
+				, filename = path.join(process.cwd(),'/themes/'+theme+"/assets", uri);
 
 			fs.exists(filename, function(exists) {
 				if(!exists) {
@@ -63,17 +69,83 @@ program
 			});
 		}).listen(parseInt(port, 10));
 
-		console.log("Static file server running at\n  => http://localhost:" + port + "/\nCTRL + C to shutdown");
+		console.log("--> Static file server running at http://localhost:" + port + "/\n--> Use CTRL + C to shutdown");
+		var serverurl = conf.momentum_domain+"/developers/preview/start/"+conf.momentum_apiuser+"?settings[asset-url]="+encodeURIComponent("http://localhost:" + port + "/");
+		openurl.open(serverurl)
+		process.on('SIGINT', function() {
+		  console.log("\n--> Shutting down server and cancelling preview session.");
+		  openurl.open(conf.momentum_domain+"/developers/preview/end")
+		  process.exit();
+		});
+		console.log("--> Enable preview mode at:\n   |--> "+serverurl);
 
 	});
 
 // $ deploy setup stage
 // $ deploy setup
 program
-	.command('deploy [file]')
+	.command('deploy [file] [theme]')
 	.description('Deploy all changed files or just a specific file.')
-	.action(function(file){
+	.action(function(file,theme){
 		file = file || 'all';
+		theme = theme || conf.momentum_theme;
+		var files = [];
+
+		if(file == 'all') {
+
+			jf.spaces = 2;
+			if(!fs.existsSync("queued-files.json")) {
+				console.log('--> No files queued for deployment.')
+			}
+			else {
+
+				files = jf.readFileSync('queued-files.json');
+			}
+		} else {
+			files = ['themes/'+theme+'/'+file];
+		}
+
+
+
+		var synchronizeLive = function(f,del,developer) {
+
+			var postRequest = function(f,del,data) {
+				rest.post(conf.momentum_domain+'/apiv2/themes/'+theme+'/files?--suppress-content', {
+					multipart: false,
+					username: conf.momentum_apiuser,
+					password: conf.momentum_apikey,
+					data: {
+						'file': f.replace('themes/'+theme+'/',''),
+						'content': new Buffer(data).toString('base64'),
+						'delete': del ? true : false
+					}
+				}).on('complete', function(data) {
+					if(program.verbose) console.log(data)
+					sys.puts('  |--> server updated: "'+f+'"')
+					notifier(f+' saved...', { title: 'Momentum' });
+				});
+			}
+
+			if(!del)
+				fs.readFile(f, 'utf8', function (err,data) {
+					if (err) return sys.puts('--> error reading file: "'+f+'" ['+err+']')
+					postRequest(f,del,data);
+				});
+			else
+				postRequest(f,del, "<div style=\"color:red;font-family:Arial;font-weight:bold\">[DELETED]</div>");
+		}
+
+		if(files.length == 0)
+			console.log('--> No files queued for deployment.')
+
+		for(x in files) {
+			var del = !fs.existsSync(files[x])
+			console.log('--> '+(del ? '[DEL]' : '[SYNC]')+' '+files[x])
+			synchronizeLive(files[x],del,false)
+		}
+		if(file == 'all')
+		jf.writeFileSync('queued-files.json',[])
+
 
 		// check commit diff since last deploy (or make sure file has been committed)
 
@@ -82,7 +154,7 @@ program
 		// request confirmation for deploy
 
 		// deploy files
-		console.log('setup for %s env(s)', env);
+		//console.log('setup for %s env(s)', env);
 	});
 
 
@@ -292,19 +364,34 @@ program
 	.description('Watch for changed files, new files and deleted files, then sync these to the test queue.')
 	.action(function(theme){
 		theme = theme || conf.momentum_theme
-		var synchronizeLive = function(f,del) {
+		//var cacheList = jf.readFileSync('queued-files.json')
+		jf.spaces = 2;
+		if(!fs.existsSync("queued-files.json")) {
+			jf.writeFileSync('queued-files.json', []);
+		}
+		var queue = jf.readFileSync('queued-files.json');
+
+
+		var synchronizeLive = function(f,del,developer) {
+
+			if(queue.indexOf(f) == -1) {
+				queue.push(f);
+				jf.writeFileSync('queued-files.json', queue);
+			}
 
 			var postRequest = function(f,del,data) {
-				rest.post(conf.momentum_domain+'/apiv2/themes/'+theme+'/files', {
+				rest.post(conf.momentum_domain+'/apiv2/themes/'+theme+'/files?--suppress-content', {
 					multipart: false,
 					username: conf.momentum_apiuser,
 					password: conf.momentum_apikey,
 					data: {
 						'file': f.replace('themes/'+theme+'/',''),
 						'content': new Buffer(data).toString('base64'),
+						'developer': !developer || conf.momentum_apiuser,
 						'delete': del ? true : false
 					}
 				}).on('complete', function(data) {
+					if(program.verbose) console.log(data)
 					sys.puts('  |--> server updated: "'+f+'"')
 					notifier(f+' saved...', { title: 'Momentum' });
 				});
@@ -319,6 +406,7 @@ program
 				postRequest(f,del, "<div style=\"color:red;font-family:Arial;font-weight:bold\">[DELETED]</div>");
 		}
 
+
 		watch.watchTree('./themes/'+theme, {ignoreDotFiles:true}, function (f, curr, prev) {
 
 			if(typeof f == "string" && !f.match(/.+\.lhtml/))
@@ -327,13 +415,12 @@ program
 			// triggers after tree has started tracking
 			if (typeof f == "object" && prev === null && curr === null) {
 				console.log('--> theme being monitored: "'+theme+'"')
-				//console.log(f)
 			}
 
 			// save a new file
 			else if (prev === null) {
 				sys.puts('--> new theme file added: "'+f+'"')
-				synchronizeLive(f)
+				synchronizeLive(f,false,true)
 			}
 
 			// remove a file.
@@ -341,15 +428,16 @@ program
 				notifier('File removed...', { title: 'Momentum' });
 
 				sys.puts('--> file deleted: "'+f+'"')
-				synchronizeLive(f,true)
+				synchronizeLive(f,true, false)
 			}
 
 			// update a file.
 			else {
 				sys.puts('--> change detected: "'+f+'"')
-				synchronizeLive(f)
+				synchronizeLive(f,false,true)
 			}
 		})
 	});
 
 program.parse(process.argv);
+
