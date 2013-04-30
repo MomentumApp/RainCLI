@@ -11,23 +11,10 @@ This repository is bootstrapped with a bunch of useful functions for managing yo
 
 * Open `config.js` and setup the configuration settings. These are available in your Momentum HQ under **Theming > Setup**.
 * Open your terminal and `cd` to your repository directory.
-* Run `make install`
+* Run `npm install`
 * Run `./rain reset` (this loads any deployed theme content into your repository, local changes will be overwritten)
-* After installation is completed, and anytime you want to work on your theme in the future, run `make run` and your changes will automatically deploy live as you work.
+* After installation is completed, and anytime you want to work on your theme in the future, run `./rain watch` and your changes will automatically deploy to the testing queue as you work.
 
-# Updating
-
-1. Accept any pull requests from Momentum's GIT repository and merge them into your repo.
-2. Run `make install && make update` to install any new modules and update old ones.
-
-# The Playground
-
-> (coming soon)
-
-Packaged in this repo in the `./themes/playground` directory are dozens of useful coding examples that you can edit and view live. Once you're done playing
-with a specific example you can always copy it to an appropriate file.
-
-* Reset all playground examples. `make playground`
 
 # Testing Live
 Every time you make a change to a file, it synchronizes live to a testing queue on your Momentum server. In order to view your changes without publishing, you have to connect your session to the API key you're using.
